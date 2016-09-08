@@ -1,18 +1,14 @@
 import pickle
 import numpy as np
-#import xgboost as xgb
-
-#from collections import defaultdict
-#from slugify import slugify
 from sklearn.base import BaseEstimator
-#from sklearn.linear_model import SGDClassifier
-#from sklearn.feature_extraction.text import TfidfTransformer
 from sklearn.pipeline import make_pipeline, make_union
-#from features import TitleVectorizer, ColumnExtractor, CategoryEncoder
+from sklearn.ensemble import RandomForestClassifier
+from features import FeatureVectorizer
+
 
 class BaseModel(BaseEstimator):
     """
-    Base clase for exposing models interface.
+    Base class for exposing models interface.
     """
 
     name = ''
@@ -30,12 +26,19 @@ class BaseModel(BaseEstimator):
     def predict(self, X):
         return self.pipeline.predict(X)
 
+    def predict_proba(self, X):
+        return self.pipeline.predict_proba(X)
+
     def score(self, X, y):
         return self.pipeline.score(X, y)
 
     def dump(self, file_path):
         with open(file_path, 'wb') as f:
             pickle.dump(self, f, pickle.HIGHEST_PROTOCOL)
+
+    def get_classes(self):
+        """Returns the resulting classes used for the estimator"""
+        return self.pipeline.named_steps['randomforestclassifier'].classes_
 
     @classmethod
     def load(cls, file_path):
@@ -46,15 +49,11 @@ class BaseModel(BaseEstimator):
 
 class DummyEstimator(BaseModel):
     """
-    This is a dummy model that returns the first mode.
-    It's used as a baseline to gather some metrics.
+    Dummy model used as baseline.
     """
     name = 'Dummy Baseline'
-    # target_column = 'top_level_category'
-    # mode = None
 
     def fit(self, X, y):
-        # self.mode = X[self.target_column].mode()
         return self
 
     def predict(self, X):
@@ -64,19 +63,26 @@ class DummyEstimator(BaseModel):
         return 1
 
 
-class TitleEstimator(BaseModel):
+class PhoneBrandEstimator(BaseModel):
     """
-    Simple estimator that vectorizes the titles and uses a linear_model to
-    model the estimator.
+    Simple estimator using phone brand and model
     """
-    name = 'Simple estimator using titles'
+    name = 'Phone brand and model estimator'
 
     def __init__(self):
         self.pipeline = make_pipeline(
-            TitleVectorizer('title',
-                strip_accents='ascii',
-                # stop_words=STOPWORDS,
-                # max_df=0.85
+            make_union(
+                make_pipeline(
+                    FeatureVectorizer('phone_brand',
+                    ),
+                ),
+                make_pipeline(
+                    FeatureVectorizer('device_model',
+                    ),
+                ),
             ),
-            SGDClassifier(loss='hinge', n_jobs=-1)
+            RandomForestClassifier(n_estimators=10,
+                                   n_jobs=-1,
+                                   random_state=42
+            )
         )
