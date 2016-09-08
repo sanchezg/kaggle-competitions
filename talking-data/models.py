@@ -57,7 +57,8 @@ class DummyEstimator(BaseModel):
         return self
 
     def predict(self, X):
-        return np.array([self.mode] * len(dataset))
+        prob = 1./12
+        return np.array([[prob] * 12] * len(X))
 
     def score(self, X, y):
         return 1
