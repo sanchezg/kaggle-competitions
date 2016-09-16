@@ -1,9 +1,14 @@
 import pickle
 import numpy as np
+import xgboost as xgb
 from sklearn.base import BaseEstimator
-from sklearn.pipeline import make_pipeline, make_union
-from sklearn.ensemble import RandomForestClassifier
-from features import FeatureVectorizer
+from sklearn.decomposition import TruncatedSVD, PCA
+from sklearn.linear_model import LogisticRegression
+from sklearn.pipeline import make_pipeline, make_union, Pipeline
+from sklearn.feature_extraction.text import TfidfTransformer
+
+from features import FeatureVectorizer, CategoryEncoder
+from features import DenseTransformer, TimeAppUsedTransformer
 
 
 class BaseModel(BaseEstimator):
@@ -38,7 +43,7 @@ class BaseModel(BaseEstimator):
 
     def get_classes(self):
         """Returns the resulting classes used for the estimator"""
-        return self.pipeline.named_steps['randomforestclassifier'].classes_
+        return self.pipeline.named_steps['classifier'].classes_
 
     @classmethod
     def load(cls, file_path):
@@ -68,22 +73,53 @@ class PhoneBrandEstimator(BaseModel):
     """
     Simple estimator using phone brand and model
     """
-    name = 'Phone brand and model estimator'
+    name = 'LREstimator'
 
     def __init__(self):
-        self.pipeline = make_pipeline(
-            make_union(
+        self.pipeline = Pipeline([
+            ('union', make_union(
                 make_pipeline(
-                    FeatureVectorizer('phone_brand',
-                    ),
+                    FeatureVectorizer('phone_brand'),
+                    TfidfTransformer(),
                 ),
                 make_pipeline(
-                    FeatureVectorizer('device_model',
-                    ),
+                    FeatureVectorizer('device_model'),
+                    TfidfTransformer(),
                 ),
-            ),
-            RandomForestClassifier(n_estimators=10,
-                                   n_jobs=-1,
-                                   random_state=42
-            )
-        )
+            )),
+            ('classifier', LogisticRegression(solver='lbfgs',
+                                              multi_class='multinomial',
+                                              warm_start=True,
+                                              n_jobs=-1)),
+        ])
+
+
+class XGBEstimator(BaseModel):
+    """."""
+    name = 'XGBEstimator'
+
+    def __init__(self):
+        self.pipeline = Pipeline([
+            ('union', make_union(
+                make_pipeline(
+                    FeatureVectorizer('phone_brand'),
+                    TfidfTransformer(),
+                ),
+                make_pipeline(
+                    FeatureVectorizer('device_model'),
+                    TfidfTransformer(),
+                ),
+                CategoryEncoder('app_id'),
+                # PCA(),
+            )),
+            # ('timetransformer', TimeAppUsedTransformer('timestamp')),
+            # densifier must go just before the classifier
+            ('densifier', DenseTransformer()),
+            ('classifier', xgb.XGBClassifier()),
+        ])
+
+    def predict(self, X):
+        return self.pipeline.predict(X)
+
+    def predict_proba(self, X):
+        return self.pipeline.predict_proba(X)
